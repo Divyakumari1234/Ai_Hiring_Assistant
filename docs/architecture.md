@@ -3,7 +3,7 @@
 ## Hiring flow
 
 1. HR pastes a job description and optional filters.
-2. FastAPI extracts search intent and queries the configured people provider. The included demo provider keeps the evaluator flow usable without a paid PDL/Apollo key.
+2. FastAPI extracts search intent and queries GitHub's public-profile search API. The included demo provider keeps the evaluator flow usable during rate limits or provider outages.
 3. HR reviews ranked candidates and explicitly selects who may be contacted.
 4. FastAPI reads the key from its environment and sends Hunar's documented bulk-call payload to `POST /external/v1/calls/bulk/`.
 5. Call events update SQLite through the webhook endpoint; the dashboard presents status, transcript, recording, and structured answers.

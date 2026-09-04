@@ -24,8 +24,7 @@ class Settings(BaseSettings):
     hunar_base_url: str = "https://api.voice.hunar.ai/external/v1"
     hunar_agent_id: str = ""
     hunar_live_calls: bool = False
-    pdl_api_key: str = ""
-    frontend_origin: str = "http://localhost:5173"
+    frontend_origin: str = "http://localhost:3000"
     model_config = SettingsConfigDict(env_file=ROOT / ".env", extra="ignore")
 
 
@@ -87,7 +86,7 @@ class SearchRequest(BaseModel):
     experience_min: int = Field(0, ge=0, le=30)
     experience_max: int = Field(15, ge=0, le=40)
     limit: int = Field(6, ge=1, le=50)
-    provider: Literal["github", "demo", "pdl"] = "github"
+    provider: Literal["github", "demo"] = "github"
 
 
 class OutreachRequest(BaseModel):
@@ -117,7 +116,7 @@ def role_from_jd(text: str) -> str:
 
 
 async def github_people_search(body: SearchRequest) -> list[dict[str, Any]]:
-    """Real public-profile search adapter. GitHub is used when paid PDL/Apollo credentials are unavailable."""
+    """Real public-profile search adapter backed by GitHub's public API."""
     role = role_from_jd(body.job_description)
     query = f'"{role}" location:"{body.location}"'
     headers = {"Accept": "application/vnd.github+json", "User-Agent": "reachly-hiring-assistant"}
@@ -152,52 +151,6 @@ async def github_people_search(body: SearchRequest) -> list[dict[str, Any]]:
     return results
 
 
-async def pdl_people_search(body: SearchRequest) -> list[dict[str, Any]]:
-    """People Data Labs Person Search adapter using the official v5 endpoint."""
-    role = role_from_jd(body.job_description)
-    query = {
-        "query": {"bool": {"must": [
-            {"match": {"job_title": role}},
-            {"match": {"location_name": body.location}},
-            {"exists": {"field": "phone_numbers"}},
-        ]}},
-        "size": body.limit,
-    }
-    async with httpx.AsyncClient(timeout=30) as client:
-        response = await client.post(
-            "https://api.peopledatalabs.com/v5/person/search",
-            headers={"X-Api-Key": settings.pdl_api_key, "Content-Type": "application/json"},
-            json=query,
-        )
-    if response.is_error:
-        raise HTTPException(response.status_code, "People Data Labs search failed")
-    results: list[dict[str, Any]] = []
-    for index, profile in enumerate(response.json().get("data", [])):
-        candidate_id = f"pdl-{profile.get('id', uuid.uuid4().hex)}"
-        phones = profile.get("phone_numbers") or []
-        emails = profile.get("emails") or []
-        name = profile.get("full_name") or "Candidate"
-        candidate = {
-            "id": candidate_id,
-            "name": name.title(),
-            "role": profile.get("job_title") or role.title(),
-            "company": profile.get("job_company_name") or "Not listed",
-            "location": profile.get("location_name") or body.location,
-            "experience": max(body.experience_min, min(body.experience_max, len(profile.get("experience") or []) or 4)),
-            "match": max(72, 96 - index * 3),
-            "phone": phones[0] if phones else "",
-            "email": emails[0].get("address", "") if emails and isinstance(emails[0], dict) else (emails[0] if emails else ""),
-            "skills": [role.title(), *(profile.get("skills") or [])[:2]],
-            "status": "New",
-            "avatar": "".join(part[0].upper() for part in name.split()[:2]),
-            "profile_url": (profile.get("linkedin_url") or profile.get("github_url")),
-            "source": "People Data Labs",
-        }
-        SEARCHED_CANDIDATES[candidate_id] = candidate
-        results.append(candidate)
-    return results
-
-
 async def hunar(method: str, path: str, payload: dict | None = None) -> Any:
     if not settings.hunar_api_key:
         raise HTTPException(503, "Hunar API key is not configured")
@@ -221,17 +174,12 @@ def health():
 
 @app.get("/api/candidates")
 def candidates(q: str = "", location: str = ""):
-    return {"results": candidate_rows(q, location), "source": "demo" if not settings.pdl_api_key else "pdl-ready", "total": len(SEED_CANDIDATES)}
+    return {"results": candidate_rows(q, location), "source": "demo", "total": len(SEED_CANDIDATES)}
 
 
 @app.post("/api/search")
 async def search(body: SearchRequest):
     source = body.provider
-    if body.provider == "pdl":
-        if not settings.pdl_api_key:
-            raise HTTPException(503, "PDL_API_KEY is not configured")
-        results = await pdl_people_search(body)
-        return {"results":results,"total":len(results),"source":"people-data-labs","criteria":{"location":body.location,"experience":f"{body.experience_min}-{body.experience_max} years"}}
     if body.provider == "github":
         try:
             results = await github_people_search(body)

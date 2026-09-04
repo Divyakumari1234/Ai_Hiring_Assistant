@@ -6,7 +6,7 @@ End-to-end hiring workflow built for the Hunar assignment: paste a job descripti
 
 - Frontend: Next.js App Router, React, TypeScript, shadcn/ui primitives, Lucide icons
 - Backend: Python, FastAPI, SQLite
-- Integrations: Hunar Voice API, optional People Data Labs adapter, CSV import
+- Integrations: Hunar Voice API, GitHub public-profile search, CSV-ready import flow
 
 ## Run locally
 

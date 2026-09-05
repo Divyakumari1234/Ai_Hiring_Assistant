@@ -1,4 +1,17 @@
+export type SearchInput = {
+  job_description: string;
+  job_title: string;
+  location: string;
+  skills: string[];
+  limit: number;
+};
+export type SearchCriteria = {
+  job_title: string;
+  location: string;
+  skills: string[];
+};
 export type Candidate = {
+  source?: string;
   id: string;
   name: string;
   role: string;

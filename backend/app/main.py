@@ -15,12 +15,14 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from .sourcing import SearchRequest, criteria, search_people, get_candidate
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class Settings(BaseSettings):
     hunar_api_key: str = ""
+    pdl_api_key: str = ""
     hunar_base_url: str = "https://api.voice.hunar.ai/external/v1"
     hunar_agent_id: str = ""
     hunar_live_calls: bool = True
@@ -167,18 +169,19 @@ async def candidates():
     return {"results": results, "total": len(results), "source": "hunar"}
 
 
-class SearchRequest(BaseModel):
-    job_description: str = Field(default="", max_length=12000)
-    location: str = ""
+@app.get("/api/search/config")
+def search_config():
+    return {"provider": "pdl", "configured": bool(settings.pdl_api_key)}
+
+
+@app.post("/api/search/criteria")
+def search_criteria(body: SearchRequest):
+    return criteria(body)
 
 
 @app.post("/api/search")
 async def search(body: SearchRequest):
-    rows = contacts(await all_rows("calls/"))
-    words = body.job_description.lower().split()
-    results = [r for r in rows if all(w in " ".join([r["name"], r["role"], r["company"], *r["skills"]]).lower() for w in words)
-               and body.location.lower() in r["location"].lower()]
-    return {"results": results, "total": len(results), "source": "hunar"}
+    return await search_people(body, settings.pdl_api_key)
 
 
 @app.get("/api/hunar/agents")
@@ -202,6 +205,7 @@ class OutreachRequest(BaseModel):
     candidate_ids: list[str] = Field(min_length=1, max_length=100)
     agent_id: str
     confirmed: bool = False
+    company: str = Field(default="", max_length=150)
 
 
 @app.post("/api/outreach")
@@ -213,11 +217,27 @@ async def outreach(body: OutreachRequest):
         raise HTTPException(422, "Select an available Hunar agent")
     rows = await all_rows("calls/")
     indexed = {str(r["id"]): r for r in rows}
+    for cid in body.candidate_ids:
+        if cid.startswith("pdl-"):
+            candidate = get_candidate(cid)
+            if candidate:
+                custom = {**candidate.get("custom_data", {}), "company": body.company.strip()}
+                if not custom["company"]:
+                    raise HTTPException(422, "Enter the hiring company for sourced candidates")
+                indexed[cid] = {"id": cid, "callee_name": candidate["name"],
+                                "mobile_number": candidate["phone"], "custom_data": custom}
     if any(cid not in indexed for cid in body.candidate_ids):
         raise HTTPException(404, "Selected contact is no longer available")
     selected = [indexed[cid] for cid in dict.fromkeys(body.candidate_ids)]
     if any(not re.fullmatch(r"\+?[0-9]{7,15}", r.get("mobile_number") or "") for r in selected):
         raise HTTPException(422, "Each selected contact needs a valid phone number")
+    agent = next(a for a in available_agents if str(a["id"]) == body.agent_id)
+    required = agent.get("required_variables") or []
+    for candidate in selected:
+        missing = [name for name in required if name not in ("callee_name", "mobile_number")
+                   and not candidate.get("custom_data", {}).get(name)]
+        if missing:
+            raise HTTPException(422, "Selected agent needs these contact fields: " + ", ".join(missing))
     created = await hunar("POST", "calls/bulk/", {
         "agent_id": body.agent_id,
         "data": [{"callee_name": r.get("callee_name") or "", "mobile_number": r["mobile_number"],

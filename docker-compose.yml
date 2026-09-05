@@ -1,15 +1,12 @@
 services:
-  backend:
-    build: ./backend
+  web:
+    build: .
     env_file:
       - ./backend/.env
-    restart: unless-stopped
-  frontend:
-    build: ./frontend
     environment:
-      - BACKEND_URL=http://backend:8000
+      PORT: "10000"
+      REVIEW_USERNAME: reviewer
+      REVIEW_PASSWORD: ${REVIEW_PASSWORD:?Set REVIEW_PASSWORD before starting the hosted workspace}
     ports:
-      - "8080:3000"
-    depends_on:
-      - backend
+      - "8080:10000"
     restart: unless-stopped

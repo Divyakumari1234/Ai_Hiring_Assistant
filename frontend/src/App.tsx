@@ -21,7 +21,8 @@ import {
   Zap,
 } from "lucide-react";
 import { api } from "./api";
-import type { Call } from "./types";
+import { PeopleSearchForm } from "./PeopleSearchForm";
+import type { Call, Candidate } from "./types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -74,6 +75,11 @@ export default function App() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [query, setQuery] = useState("");
+  const [sourced, setSourced] = useState<Candidate[]>([]);
+  const [contactSource, setContactSource] = useState<"account" | "search">(
+    "account",
+  );
+  const [company, setCompany] = useState("");
   const [contactPage, setContactPage] = useState(0);
   const [callPage, setCallPage] = useState(0);
   const [activeId, setActiveId] = useState("");
@@ -111,7 +117,11 @@ export default function App() {
           : response.default_agent_id,
       );
       setSelected((current) =>
-        current.filter((id) => response.candidates.some((c) => c.id === id)),
+        current.filter(
+          (id) =>
+            id.startsWith("pdl-") ||
+            response.candidates.some((c) => c.id === id),
+        ),
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load Hunar data");
@@ -146,13 +156,17 @@ export default function App() {
       cancelled = true;
     };
   }, [activeId, data]);
-  const candidates = data?.candidates ?? [];
+  const candidates = [...sourced, ...(data?.candidates ?? [])];
   const calls = data?.calls ?? [];
-  const filtered = candidates.filter((c) =>
-    `${c.name} ${c.role} ${c.company} ${c.location} ${c.phone} ${c.skills.join(" ")}`
-      .toLowerCase()
-      .includes(query.toLowerCase()),
-  );
+  const filtered = candidates
+    .filter((c) =>
+      contactSource === "search" ? c.source === "pdl" : c.source !== "pdl",
+    )
+    .filter((c) =>
+      `${c.name} ${c.role} ${c.company} ${c.location} ${c.phone} ${c.skills.join(" ")}`
+        .toLowerCase()
+        .includes(query.toLowerCase()),
+    );
   const chosen = candidates.filter((c) => selected.includes(c.id));
   const completed = calls.filter(
     (c) => c.status.toUpperCase() === "COMPLETED",
@@ -166,7 +180,7 @@ export default function App() {
     setLaunching(true);
     setMessage("");
     try {
-      const result = await api.outreach(selected, agent, confirmed);
+      const result = await api.outreach(selected, agent, confirmed, company);
       setMessage(result.message);
       setConfirmed(false);
       setSelected([]);
@@ -439,6 +453,40 @@ export default function App() {
                       </p>
                     </div>
                   </div>
+                  <PeopleSearchForm
+                    onResults={(rows) => {
+                      setSourced(rows);
+                      setContactSource("search");
+                      setContactPage(0);
+                      setQuery("");
+                      setSelected((current) =>
+                        current.filter((id) => !id.startsWith("pdl-")),
+                      );
+                    }}
+                  />
+                  <div
+                    className="sourcing-actions"
+                    style={{ marginBottom: 20 }}
+                  >
+                    <Button
+                      onClick={() => {
+                        setContactSource("account");
+                        setContactPage(0);
+                      }}
+                      aria-pressed={contactSource === "account"}
+                    >
+                      Existing account contacts
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        setContactSource("search");
+                        setContactPage(0);
+                      }}
+                      aria-pressed={contactSource === "search"}
+                    >
+                      Search results ({sourced.length})
+                    </Button>
+                  </div>
                   <section className="search-builder card">
                     <label>
                       Search name, phone, role, company or skills
@@ -475,6 +523,7 @@ export default function App() {
                           <input
                             aria-label={`Select ${c.name}`}
                             type="checkbox"
+                            disabled={!c.phone}
                             checked={selected.includes(c.id)}
                             onChange={(e) =>
                               setSelected(
@@ -489,6 +538,9 @@ export default function App() {
                             <div>
                               <h3>{c.name}</h3>
                               <Pill>{c.status}</Pill>
+                              {c.source === "pdl" && (
+                                <Pill>People Data Labs</Pill>
+                              )}
                             </div>
                             <b>
                               {c.role || "Role not provided"}
@@ -582,6 +634,17 @@ export default function App() {
                         ))}
                       </select>
                     </label>
+                    {chosen.some((c) => c.source === "pdl") && (
+                      <label className="hiring-company">
+                        Hiring company
+                        <input
+                          value={company}
+                          onChange={(e) => setCompany(e.target.value)}
+                          maxLength={150}
+                          placeholder="Company the agent is hiring for"
+                        />
+                      </label>
+                    )}
                     {!data.live_calls && (
                       <p>
                         Live calling is disabled in the server configuration.
@@ -602,6 +665,8 @@ export default function App() {
                         !confirmed ||
                         !data.live_calls ||
                         !chosen.length ||
+                        (chosen.some((c) => c.source === "pdl") &&
+                          !company.trim()) ||
                         !data.agents.some((a) => a.id === agent)
                       }
                       onClick={launch}

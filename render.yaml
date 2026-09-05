@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: reachly-hiring-assistant
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /healthz
+    envVars:
+      - key: HUNAR_API_KEY
+        sync: false
+      - key: PDL_API_KEY
+        sync: false
+      - key: REVIEW_PASSWORD
+        sync: false
+      - key: REVIEW_USERNAME
+        value: reviewer
+      - key: HUNAR_LIVE_CALLS
+        value: "true"

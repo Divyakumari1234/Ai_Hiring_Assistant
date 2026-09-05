@@ -1,4 +1,10 @@
-import type { Call, Dashboard } from "./types";
+import type {
+  Call,
+  Dashboard,
+  Candidate,
+  SearchInput,
+  SearchCriteria,
+} from "./types";
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const readOnly = (options?.method ?? "GET").toUpperCase() === "GET";
   const attempts = readOnly ? 3 : 1;
@@ -23,7 +29,9 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
       throw new Error(
         readOnly
           ? "Connection to the server failed after retrying. Keep the backend running and click Retry."
-          : "The call request could not be confirmed. Refresh Conversations before trying again to avoid duplicate calls.",
+          : path !== "/api/outreach"
+            ? "The search request failed. Check the connection and provider usage before retrying."
+            : "The call request could not be confirmed. Refresh Conversations before trying again to avoid duplicate calls.",
       );
     }
     if (!response.ok) {
@@ -46,6 +54,17 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 let dashboardRequest: Promise<Dashboard> | null = null;
 export const api = {
+  searchConfig: () => request<{ configured: boolean }>("/api/search/config"),
+  searchCriteria: (input: SearchInput) =>
+    request<SearchCriteria>("/api/search/criteria", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  search: (input: SearchInput) =>
+    request<{ results: Candidate[]; total: number; criteria: SearchCriteria }>(
+      "/api/search",
+      { method: "POST", body: JSON.stringify(input) },
+    ),
   dashboard: (refresh = false) => {
     if (!dashboardRequest) {
       dashboardRequest = request<Dashboard>(
@@ -57,9 +76,14 @@ export const api = {
     return dashboardRequest;
   },
   call: (id: string) => request<Call>(`/api/calls/${encodeURIComponent(id)}`),
-  outreach: (candidate_ids: string[], agent_id: string, confirmed: boolean) =>
+  outreach: (
+    candidate_ids: string[],
+    agent_id: string,
+    confirmed: boolean,
+    company = "",
+  ) =>
     request<{ message: string; mode: string }>("/api/outreach", {
       method: "POST",
-      body: JSON.stringify({ candidate_ids, agent_id, confirmed }),
+      body: JSON.stringify({ candidate_ids, agent_id, confirmed, company }),
     }),
 };

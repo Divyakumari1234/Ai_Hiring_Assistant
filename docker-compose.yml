@@ -3,8 +3,6 @@ services:
     build: ./backend
     env_file:
       - ./backend/.env
-    volumes:
-      - reachly-data:/app/data
     restart: unless-stopped
   frontend:
     build: ./frontend
@@ -15,5 +13,3 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
-volumes:
-  reachly-data:

@@ -4,96 +4,26 @@ import { useEffect, useState } from "react";
 import {
   ArrowRight,
   BarChart3,
-  Bell,
-  BriefcaseBusiness,
-  CalendarClock,
-  Check,
-  ChevronDown,
   ChevronRight,
   Clock3,
-  Download,
   Headphones,
   LayoutDashboard,
-  MapPin,
   Menu,
   Mic2,
-  MoreHorizontal,
   Phone,
   PhoneCall,
-  Play,
   Search,
-  Settings,
   ShieldCheck,
   Sparkles,
-  Upload,
   Users,
   UserSearch,
   X,
   Zap,
 } from "lucide-react";
 import { api } from "./api";
-import type { Call, Candidate } from "./types";
+import type { Call } from "./types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-
-const FALLBACK: Candidate[] = [
-  {
-    id: "c1",
-    name: "Aarav Mehta",
-    role: "Senior Product Designer",
-    company: "Razorpay",
-    location: "Bengaluru, India",
-    experience: 7,
-    match: 96,
-    phone: "+91 ••••• 0101",
-    email: "aarav@example.com",
-    skills: ["Figma", "Design systems", "Research"],
-    status: "Qualified",
-    avatar: "AM",
-  },
-  {
-    id: "c2",
-    name: "Meera Nair",
-    role: "Product Designer II",
-    company: "CRED",
-    location: "Bengaluru, India",
-    experience: 5,
-    match: 93,
-    phone: "+91 ••••• 0102",
-    email: "meera@example.com",
-    skills: ["Figma", "Prototyping", "Fintech"],
-    status: "Interested",
-    avatar: "MN",
-  },
-  {
-    id: "c3",
-    name: "Kabir Shah",
-    role: "Senior UX Designer",
-    company: "Groww",
-    location: "Mumbai, India",
-    experience: 6,
-    match: 89,
-    phone: "+91 ••••• 0103",
-    email: "kabir@example.com",
-    skills: ["UX strategy", "Research", "Mobile"],
-    status: "New",
-    avatar: "KS",
-  },
-  {
-    id: "c4",
-    name: "Ishita Rao",
-    role: "Product Designer",
-    company: "Swiggy",
-    location: "Hyderabad, India",
-    experience: 4,
-    match: 86,
-    phone: "+91 ••••• 0104",
-    email: "ishita@example.com",
-    skills: ["Interaction", "Figma", "B2C"],
-    status: "Call scheduled",
-    avatar: "IR",
-  },
-];
 
 type Page =
   | "Overview"
@@ -108,18 +38,6 @@ const nav: [Page, typeof LayoutDashboard][] = [
   ["Conversations", Headphones],
   ["Attendance plan", ShieldCheck],
 ];
-const defaultJD = `We are looking for a Senior Product Designer to join our product team in Bengaluru. You will own end-to-end design for fintech experiences, conduct user research, create high-fidelity prototypes in Figma, and evolve our design system.\n\nRequirements: 5+ years of product design experience, strong portfolio, excellent communication, and experience collaborating with product and engineering teams.`;
-
-function Logo() {
-  return (
-    <div className="logo">
-      <span>
-        <Zap size={17} fill="currentColor" />
-      </span>
-      reachly
-    </div>
-  );
-}
 function Pill({
   children,
   tone = "gray",
@@ -129,54 +47,204 @@ function Pill({
 }) {
   return <Badge className={tone}>{children}</Badge>;
 }
+const display = (value: unknown): string =>
+  value == null
+    ? "Not provided"
+    : typeof value === "object"
+      ? JSON.stringify(value)
+      : String(value);
+
+function resultPreview(result: Call["result"]) {
+  const summary = result.summary ?? result.qualification_summary;
+  if (typeof summary === "string" && summary.trim()) return summary;
+  return (
+    Object.entries(result)
+      .slice(0, 3)
+      .map(([key, value]) => `${key.replaceAll("_", " ")}: ${display(value)}`)
+      .join("; ") || "No answers yet"
+  );
+}
 
 export default function App() {
-  const [page, setPage] = useState<Page>("Overview"),
-    [mobileNav, setMobileNav] = useState(false),
-    [candidates, setCandidates] = useState<Candidate[]>(FALLBACK),
-    [calls, setCalls] = useState<Call[]>([]),
-    [selected, setSelected] = useState<string[]>(["c1", "c2", "c3"]),
-    [toast, setToast] = useState(""),
-    [live, setLive] = useState(false);
-  const refreshCalls = () =>
-    api
-      .calls()
-      .then((x) => setCalls(x.results))
-      .catch(() => {});
+  const [page, setPage] = useState<Page>("Overview");
+  const [data, setData] = useState<Awaited<
+    ReturnType<typeof api.dashboard>
+  > | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [query, setQuery] = useState("");
+  const [contactPage, setContactPage] = useState(0);
+  const [callPage, setCallPage] = useState(0);
+  const [activeId, setActiveId] = useState("");
+  const pageSize = 20;
   useEffect(() => {
-    api
-      .candidates()
-      .then((x) => setCandidates(x.results))
-      .catch(() => {});
-    refreshCalls();
-    api
-      .health()
-      .then((x) => setLive(x.hunar_configured && x.live_calls))
-      .catch(() => {});
+    window.scrollTo({ top: 0 });
+  }, [page]);
+  useEffect(() => {
+    setContactPage(0);
+  }, [query]);
+  useEffect(() => {
+    if (page === "Conversations" && activeId) {
+      document
+        .getElementById("call-detail")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [page, activeId]);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [agent, setAgent] = useState("");
+  const [confirmed, setConfirmed] = useState(false);
+  const [launching, setLaunching] = useState(false);
+  const [detail, setDetail] = useState<Call | null>(null);
+  const [detailError, setDetailError] = useState("");
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [mobileNav, setMobileNav] = useState(false);
+  async function refresh(force = true) {
+    setLoading(true);
+    setError("");
+    try {
+      const response = await api.dashboard(force);
+      setData(response);
+      setAgent((current) =>
+        response.agents.some((a) => a.id === current)
+          ? current
+          : response.default_agent_id,
+      );
+      setSelected((current) =>
+        current.filter((id) => response.candidates.some((c) => c.id === id)),
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not load Hunar data");
+    } finally {
+      setLoading(false);
+    }
+  }
+  useEffect(() => {
+    void refresh(false);
   }, []);
-  const show = (m: string) => {
-    setToast(m);
-    setTimeout(() => setToast(""), 3200);
-  };
+  useEffect(() => {
+    if (!activeId) return;
+    let cancelled = false;
+    setDetail(null);
+    setDetailError("");
+    setDetailLoading(true);
+    api
+      .call(activeId)
+      .then((call) => {
+        if (!cancelled) setDetail(call);
+      })
+      .catch((e) => {
+        if (!cancelled)
+          setDetailError(
+            e instanceof Error ? e.message : "Could not load call",
+          );
+      })
+      .finally(() => {
+        if (!cancelled) setDetailLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeId, data]);
+  const candidates = data?.candidates ?? [];
+  const calls = data?.calls ?? [];
+  const filtered = candidates.filter((c) =>
+    `${c.name} ${c.role} ${c.company} ${c.location} ${c.phone} ${c.skills.join(" ")}`
+      .toLowerCase()
+      .includes(query.toLowerCase()),
+  );
+  const chosen = candidates.filter((c) => selected.includes(c.id));
+  const completed = calls.filter(
+    (c) => c.status.toUpperCase() === "COMPLETED",
+  ).length;
+  const interested = calls.filter((c) =>
+    ["true", "yes", "high", "interested"].includes(
+      String(c.result.interested ?? c.result.interest ?? "").toLowerCase(),
+    ),
+  ).length;
+  async function launch() {
+    setLaunching(true);
+    setMessage("");
+    try {
+      const result = await api.outreach(selected, agent, confirmed);
+      setMessage(result.message);
+      setConfirmed(false);
+      setSelected([]);
+      setPage("Conversations");
+      await refresh();
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Could not launch outreach");
+    } finally {
+      setLaunching(false);
+    }
+  }
+  function callRows(rows: Call[]) {
+    return rows.length ? (
+      <div className="table call-table">
+        <div className="tr th">
+          <span>Contact</span>
+          <span>Status</span>
+          <span>Result</span>
+          <span>Duration</span>
+          <span />
+        </div>
+        {rows.map((c) => (
+          <div
+            className={`tr ${activeId === c.id ? "active-call" : ""}`}
+            key={c.id}
+          >
+            <b className="call-name" data-label="Contact">
+              {c.candidate_name}
+            </b>
+            <span>
+              <Pill>{c.status}</Pill>
+            </span>
+            <span
+              data-label="Result"
+              className="result-preview"
+              title={resultPreview(c.result)}
+            >
+              {resultPreview(c.result)}
+            </span>
+            <span data-label="Duration">{c.duration} sec</span>
+            <button
+              className="icon"
+              aria-label={`View call for ${c.candidate_name}`}
+              onClick={() => {
+                setActiveId(c.id);
+                setPage("Conversations");
+              }}
+            >
+              <ChevronRight />
+            </button>
+          </div>
+        ))}
+      </div>
+    ) : (
+      <div className="empty">No calls returned by Hunar.</div>
+    );
+  }
   return (
     <div className="app">
       <aside className={mobileNav ? "open" : ""}>
         <div className="brand-row">
-          <Logo />
+          <div className="logo">
+            <Zap /> reachly
+          </div>
           <button
             className="icon mobile-only"
             onClick={() => setMobileNav(false)}
+            aria-label="Close navigation"
           >
-            <X size={19} />
+            <X />
           </button>
         </div>
         <div className="workspace">
-          <div className="workspace-icon">AC</div>
+          <div className="workspace-icon">H</div>
           <div>
-            <b>Acme India</b>
-            <small>Talent team</small>
+            <b>Hunar workspace</b>
+            <small>Voice outreach</small>
           </div>
-          <ChevronDown size={16} />
         </div>
         <nav>
           {nav.map(([label, Icon]) => (
@@ -190,29 +258,18 @@ export default function App() {
             >
               <Icon size={18} />
               {label}
-              {label === "Conversations" && <em>3</em>}
+              {label === "Conversations" && data && <em>{calls.length}</em>}
             </button>
           ))}
         </nav>
         <div className="side-bottom">
-          <div className="trial">
-            <div>
-              <Sparkles size={17} />
-              <b>7 days left</b>
-            </div>
-            <p>Explore unlimited searches and voice outreach.</p>
-            <button>
-              View plan <ArrowRight size={14} />
-            </button>
-          </div>
-          <button className="profile">
-            <span>DK</span>
-            <div>
-              <b>Divya Kumari</b>
-              <small>Administrator</small>
-            </div>
-            <MoreHorizontal size={18} />
-          </button>
+          <p>
+            {loading
+              ? "Connecting to company account..."
+              : data
+                ? "Connected company account"
+                : "Company connection unavailable"}
+          </p>
         </div>
       </aside>
       {mobileNav && (
@@ -223,762 +280,447 @@ export default function App() {
           <button
             className="icon mobile-only"
             onClick={() => setMobileNav(true)}
+            aria-label="Open navigation"
           >
             <Menu />
           </button>
           <div className="crumb">
-            Acme India <ChevronRight size={14} /> <b>{page}</b>
+            Hunar <ChevronRight size={14} />
+            <b>{page}</b>
           </div>
           <div className="header-actions">
-            <div className={`connection ${live ? "live" : ""}`}>
-              <i /> {live ? "Hunar live" : "Safe demo mode"}
+            <div className={`connection ${data && !loading ? "live" : ""}`}>
+              <i />
+              {loading
+                ? data
+                  ? "Updating..."
+                  : "Loading Hunar..."
+                : data
+                  ? "Hunar connected"
+                  : "Hunar unavailable"}
             </div>
-            <button className="icon">
-              <Search size={18} />
-            </button>
-            <button className="icon">
-              <Bell size={18} />
-              <i className="notification" />
-            </button>
+            <Button
+              onClick={() => void refresh()}
+              disabled={loading || launching}
+            >
+              Refresh
+            </Button>
           </div>
         </header>
-        {page === "Overview" && (
-          <Overview candidates={candidates} calls={calls} go={setPage} />
-        )}{" "}
-        {page === "People search" && (
-          <PeopleSearch
-            candidates={candidates}
-            setCandidates={setCandidates}
-            selected={selected}
-            setSelected={setSelected}
-            go={setPage}
-            show={show}
-          />
-        )}{" "}
-        {page === "Outreach" && (
-          <Outreach
-            candidates={candidates.filter((c) => selected.includes(c.id))}
-            show={show}
-            go={setPage}
-            refreshCalls={refreshCalls}
-          />
-        )}{" "}
-        {page === "Conversations" && <Conversations calls={calls} />}{" "}
-        {page === "Attendance plan" && <Attendance />}
-      </main>
-      {toast && (
-        <div className="toast">
-          <Check size={16} />
-          {toast}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Overview({
-  candidates,
-  calls,
-  go,
-}: {
-  candidates: Candidate[];
-  calls: Call[];
-  go: (p: Page) => void;
-}) {
-  const complete = calls.filter((c) => c.status === "COMPLETED").length;
-  return (
-    <div className="page">
-      <div className="welcome">
-        <div>
-          <Pill tone="lime">
-            <Sparkles size={13} /> AI hiring workspace
-          </Pill>
-          <h1>Good afternoon, Divya.</h1>
-          <p>Here’s what’s happening across your hiring pipeline today.</p>
-        </div>
-        <Button onClick={() => go("People search")}>
-          <UserSearch size={17} /> Find candidates
-        </Button>
-      </div>
-      <section className="metrics">
-        <article>
-          <span className="metric-icon purple">
-            <Users />
-          </span>
-          <div>
-            <small>Candidates found</small>
-            <strong>{candidates.length * 21}</strong>
-            <p>
-              <b>+18%</b> this week
-            </p>
-          </div>
-        </article>
-        <article>
-          <span className="metric-icon green">
-            <PhoneCall />
-          </span>
-          <div>
-            <small>Calls completed</small>
-            <strong>{complete + 41}</strong>
-            <p>
-              <b>82%</b> connect rate
-            </p>
-          </div>
-        </article>
-        <article>
-          <span className="metric-icon orange">
-            <Sparkles />
-          </span>
-          <div>
-            <small>Interested</small>
-            <strong>18</strong>
-            <p>
-              <b>42%</b> of connected
-            </p>
-          </div>
-        </article>
-        <article>
-          <span className="metric-icon blue">
-            <CalendarClock />
-          </span>
-          <div>
-            <small>Interviews booked</small>
-            <strong>7</strong>
-            <p>
-              <b>+3</b> since Monday
-            </p>
-          </div>
-        </article>
-      </section>
-      <div className="overview-grid">
-        <section className="card activity">
-          <div className="card-head">
-            <div>
-              <h2>Hiring activity</h2>
-              <p>Candidate engagement over the last 7 days</p>
-            </div>
-            <select>
-              <option>Last 7 days</option>
-            </select>
-          </div>
-          <div className="chart">
-            <div className="y-axis">
-              <span>60</span>
-              <span>40</span>
-              <span>20</span>
-              <span>0</span>
-            </div>
-            <div className="bars">
-              {[35, 46, 40, 61, 54, 75, 67].map((v, i) => (
-                <div className="bar-col" key={i}>
-                  <div className="bar-bg">
-                    <i style={{ height: `${v}%` }} />
-                    <b style={{ height: `${Math.max(16, v - 27)}%` }} />
-                  </div>
-                  <span>
-                    {["Fri", "Sat", "Sun", "Mon", "Tue", "Wed", "Thu"][i]}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="legend">
-            <span>
-              <i className="dot purple-bg" />
-              Candidates found
-            </span>
-            <span>
-              <i className="dot lime-bg" />
-              Connected
-            </span>
-          </div>
-        </section>
-        <section className="card next">
-          <div className="card-head">
-            <div>
-              <h2>Up next</h2>
-              <p>Scheduled interviews</p>
-            </div>
-            <button className="link">View calendar</button>
-          </div>
-          {[
-            ["AM", "Aarav Mehta", "Senior Product Designer", "Today · 4:30 PM"],
-            ["MN", "Meera Nair", "Product Designer II", "Tomorrow · 11:00 AM"],
-            ["KS", "Kabir Shah", "Senior UX Designer", "Sep 06 · 2:00 PM"],
-          ].map((x, i) => (
-            <div className="interview" key={x[1]}>
-              <span className={`avatar a${i}`}>{x[0]}</span>
-              <div>
-                <b>{x[1]}</b>
-                <small>{x[2]}</small>
-                <p>
-                  <Clock3 size={13} />
-                  {x[3]}
-                </p>
-              </div>
-              <button className="icon">
-                <MoreHorizontal />
-              </button>
-            </div>
-          ))}
-        </section>
-      </div>
-      <section className="card recent">
-        <div className="card-head">
-          <div>
-            <h2>Recent conversations</h2>
-            <p>Latest candidate outreach powered by Hunar Voice AI</p>
-          </div>
-          <button className="secondary" onClick={() => go("Conversations")}>
-            View all <ArrowRight size={15} />
-          </button>
-        </div>
-        <ConversationTable calls={calls} />
-      </section>
-    </div>
-  );
-}
-
-function PeopleSearch({
-  candidates,
-  setCandidates,
-  selected,
-  setSelected,
-  go,
-  show,
-}: {
-  candidates: Candidate[];
-  setCandidates: (v: Candidate[]) => void;
-  selected: string[];
-  setSelected: (v: string[]) => void;
-  go: (p: Page) => void;
-  show: (m: string) => void;
-}) {
-  const [jd, setJd] = useState(defaultJD),
-    [location, setLocation] = useState("India"),
-    [loading, setLoading] = useState(false),
-    [searched, setSearched] = useState(false);
-  const run = async () => {
-    setLoading(true);
-    try {
-      const r = await api.search(jd, location);
-      setCandidates(r.results);
-      setSelected(r.results.slice(0, 3).map((candidate) => candidate.id));
-      setSearched(true);
-      show(`${r.total} strong matches found`);
-    } catch {
-      setSearched(true);
-      show("Showing demo matches — backend is offline");
-    } finally {
-      setLoading(false);
-    }
-  };
-  const toggle = (id: string) =>
-    setSelected(
-      selected.includes(id)
-        ? selected.filter((x) => x !== id)
-        : [...selected, id],
-    );
-  return (
-    <div className="page search-page">
-      <div className="title-row">
-        <div>
-          <span className="eyebrow">PEOPLE SEARCH</span>
-          <h1>Find your next great hire.</h1>
-          <p>
-            Paste a job description. We’ll understand the role and surface the
-            best-fit people.
-          </p>
-        </div>
-        <button className="secondary">
-          <Upload size={16} /> Import CSV
-        </button>
-      </div>
-      <section className="search-builder card">
-        <div className="builder-head">
-          <div className="step">1</div>
-          <div>
-            <h2>Tell us who you’re looking for</h2>
-            <p>
-              We’ll extract skills, seniority, location, and experience
-              automatically.
-            </p>
-          </div>
-          <Pill tone="lime">
-            <Sparkles size={13} /> AI-powered
-          </Pill>
-        </div>
-        <label>
-          Job description
-          <textarea value={jd} onChange={(e) => setJd(e.target.value)} />
-          <span>{jd.length.toLocaleString()} / 12,000</span>
-        </label>
-        <div className="filters">
-          <label>
-            <span>Location</span>
-            <div className="input">
-              <MapPin size={16} />
-              <input
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-              />
-            </div>
-          </label>
-          <label>
-            <span>Experience</span>
-            <select>
-              <option>3 – 12 years</option>
-            </select>
-          </label>
-          <label>
-            <span>Company type</span>
-            <select>
-              <option>Any company</option>
-              <option>Startup</option>
-              <option>Enterprise</option>
-            </select>
-          </label>
-          <button
-            className="primary search-btn"
-            disabled={loading || jd.length < 20}
-            onClick={run}
-          >
-            {loading ? <i className="spinner" /> : <Search size={17} />}{" "}
-            {loading ? "Finding people…" : "Find matching people"}
-          </button>
-        </div>
-      </section>
-      {(searched || candidates.length > 0) && (
-        <section className="results">
-          <div className="results-head">
-            <div>
-              <h2>{candidates.length} people match this role</h2>
-              <p>Ranked by experience, skills, and role relevance</p>
-            </div>
-            <div>
-              <button className="secondary">
-                <Download size={15} /> Export
-              </button>
-              <button
-                className="primary"
-                disabled={!selected.length}
-                onClick={() => go("Outreach")}
-              >
-                <PhoneCall size={16} /> Reach out to {selected.length}
-              </button>
-            </div>
-          </div>
-          <div className="candidate-list">
-            {candidates.map((c) => (
-              <article
-                className={`candidate card ${selected.includes(c.id) ? "selected" : ""}`}
-                key={c.id}
-              >
+        {data && (
+          <nav className="workflow" aria-label="Hiring workflow">
+            {(["People search", "Outreach", "Conversations"] as Page[]).map(
+              (step, index) => (
                 <button
-                  className={`check ${selected.includes(c.id) ? "checked" : ""}`}
-                  onClick={() => toggle(c.id)}
+                  key={step}
+                  aria-current={page === step ? "step" : undefined}
+                  onClick={() => setPage(step)}
                 >
-                  {selected.includes(c.id) && <Check size={14} />}
+                  <span>{index + 1}</span>
+                  {
+                    ["Select contacts", "Set up outreach", "Review answers"][
+                      index
+                    ]
+                  }
+                  <ChevronRight size={15} />
                 </button>
-                <span className="avatar large">{c.avatar}</span>
-                <div className="candidate-main">
-                  <div>
-                    <h3>{c.name}</h3>
-                    <Pill
-                      tone={
-                        c.status === "Qualified" || c.status === "Interested"
-                          ? "green"
-                          : "gray"
-                      }
-                    >
-                      {c.status}
-                    </Pill>
-                  </div>
-                  <b>
-                    {c.role} <span>at {c.company}</span>
-                  </b>
-                  <p>
-                    <MapPin size={14} />
-                    {c.location}
-                    <i /> {c.experience} years experience
-                  </p>
-                  <div className="skills">
-                    {c.skills.map((s) => (
-                      <Pill key={s}>{s}</Pill>
-                    ))}
-                  </div>
-                </div>
-                <div className="match">
-                  <strong>{c.match}%</strong>
-                  <span>match</span>
-                  <div>
-                    <i style={{ width: `${c.match}%` }} />
-                  </div>
-                </div>
-                <button className="icon">
-                  <MoreHorizontal />
-                </button>
-              </article>
-            ))}
-          </div>
-        </section>
-      )}
-    </div>
-  );
-}
-
-function Outreach({
-  candidates,
-  show,
-  go,
-  refreshCalls,
-}: {
-  candidates: Candidate[];
-  show: (m: string) => void;
-  go: (p: Page) => void;
-  refreshCalls: () => Promise<void>;
-}) {
-  const [channel, setChannel] = useState<"voice" | "voice+sms">("voice"),
-    [launching, setLaunching] = useState(false),
-    [script, setScript] = useState(
-      "Hi {{first_name}}, I’m Maya, an AI hiring assistant calling on behalf of Acme. I came across your profile and thought your experience could be a strong match for our Senior Product Designer role. Is now a good time for a quick conversation?",
-    );
-  const launch = async () => {
-    if (!candidates.length) return;
-    setLaunching(true);
-    try {
-      const r = await api.outreach(
-        candidates.map((c) => c.id),
-        channel,
-      );
-      await refreshCalls();
-      show(`${r.message} · ${r.mode} mode`);
-      setTimeout(() => go("Conversations"), 900);
-    } catch (e) {
-      show(e instanceof Error ? e.message : "Could not launch outreach");
-    } finally {
-      setLaunching(false);
-    }
-  };
-  return (
-    <div className="page">
-      <div className="title-row">
-        <div>
-          <span className="eyebrow">VOICE OUTREACH</span>
-          <h1>Start a thoughtful conversation.</h1>
-          <p>
-            Configure your AI agent, review the shortlist, and let Hunar handle
-            every call.
-          </p>
-        </div>
-        <Pill tone="lime">
-          <Mic2 size={14} /> Powered by Hunar AI
-        </Pill>
-      </div>
-      <div className="outreach-grid">
-        <div>
-          <section className="card setup">
-            <div className="builder-head">
-              <div className="step">1</div>
-              <div>
-                <h2>Choose a channel</h2>
-                <p>Voice-first outreach with an optional follow-up.</p>
-              </div>
-            </div>
-            <div className="channel-grid">
-              <button
-                className={channel === "voice" ? "selected" : ""}
-                onClick={() => setChannel("voice")}
-              >
-                <span>
-                  <PhoneCall />
-                </span>
-                <b>Voice call</b>
-                <small>Natural AI conversation</small>
-                <Check />
-              </button>
-              <button
-                className={channel === "voice+sms" ? "selected" : ""}
-                onClick={() => setChannel("voice+sms")}
-              >
-                <span>
-                  <Zap />
-                </span>
-                <b>Voice + SMS</b>
-                <small>Text follow-up after call</small>
-                <Check />
-              </button>
-            </div>
-          </section>
-          <section className="card setup">
-            <div className="builder-head">
-              <div className="step">2</div>
-              <div>
-                <h2>Conversation brief</h2>
-                <p>Give Maya context; she’ll adapt naturally.</p>
-              </div>
-            </div>
-            <label>
-              Opening message
-              <textarea
-                value={script}
-                onChange={(e) => setScript(e.target.value)}
-              />
-            </label>
-            <div className="questions">
-              <b>Screening questions</b>
-              {[
-                "Are you open to exploring a new opportunity?",
-                "What is your current notice period?",
-                "What are your current and expected compensation?",
-                "When are you available for an interview?",
-              ].map((q, i) => (
-                <div>
-                  <span>{i + 1}</span>
-                  {q}
-                  <MoreHorizontal size={16} />
-                </div>
-              ))}
-            </div>
-          </section>
-        </div>
-        <aside className="card launch-card">
-          <div className="agent">
-            <span>
-              <Mic2 />
-            </span>
-            <div>
-              <small>YOUR AI AGENT</small>
-              <h3>Maya</h3>
-              <p>Warm · Professional · English + Hindi</p>
-            </div>
-            <i className="online" />
-          </div>
-          <hr />
-          <h3>Campaign summary</h3>
-          <div className="summary-row">
-            <span>Candidates</span>
-            <b>{candidates.length}</b>
-          </div>
-          <div className="summary-row">
-            <span>Channel</span>
-            <b>{channel === "voice" ? "Voice call" : "Voice + SMS"}</b>
-          </div>
-          <div className="summary-row">
-            <span>Expected duration</span>
-            <b>3–5 min each</b>
-          </div>
-          <div className="mini-list">
-            {candidates.slice(0, 4).map((c) => (
-              <div>
-                <span className="avatar small">{c.avatar}</span>
-                <div>
-                  <b>{c.name}</b>
-                  <small>{c.role}</small>
-                </div>
-                <Check size={15} />
-              </div>
-            ))}
-            {candidates.length > 4 && (
-              <p>+{candidates.length - 4} more candidates</p>
+              ),
             )}
-          </div>
-          <button
-            className="primary full"
-            disabled={!candidates.length || launching}
-            onClick={launch}
+          </nav>
+        )}
+        {message && (
+          <div
+            className="card"
+            role="status"
+            style={{ margin: 24, padding: 20 }}
           >
-            {launching ? (
-              <i className="spinner" />
-            ) : (
-              <Play size={16} fill="currentColor" />
-            )}
-            {launching ? "Launching…" : `Launch ${candidates.length} calls`}
-          </button>
-          <p className="secure">
-            <ShieldCheck size={14} /> Calls are recorded only with candidate
-            consent.
-          </p>
-        </aside>
-      </div>
-    </div>
-  );
-}
-
-function Conversations({ calls }: { calls: Call[] }) {
-  const [active, setActive] = useState<Call | undefined>(calls[0]);
-  useEffect(() => {
-    if (!active && calls[0]) setActive(calls[0]);
-  }, [calls]);
-  return (
-    <div className="page">
-      <div className="title-row">
-        <div>
-          <span className="eyebrow">CONVERSATIONS</span>
-          <h1>Every answer, ready to act on.</h1>
-          <p>
-            Review call outcomes, transcripts, and structured candidate
-            insights.
-          </p>
-        </div>
-        <button className="secondary">
-          <Download size={16} /> Export responses
-        </button>
-      </div>
-      <div className="conversation-layout">
-        <section className="card conversation-list">
-          <div className="list-search">
-            <Search />
-            <input placeholder="Search candidates…" />
+            {message}
           </div>
-          {calls.map((c) => (
-            <button
-              className={active?.id === c.id ? "active" : ""}
-              onClick={() => setActive(c)}
-            >
-              <span className="avatar">
-                {c.candidate_name
-                  .split(" ")
-                  .map((x) => x[0])
-                  .join("")}
-              </span>
-              <div>
-                <b>{c.candidate_name}</b>
-                <small>{c.status.replace("_", " ").toLowerCase()}</small>
-                <p>
-                  {c.transcript?.at(-1)?.text || "No conversation captured yet"}
-                </p>
-              </div>
-              <time>
-                {c.duration
-                  ? `${Math.floor(c.duration / 60)}:${String(c.duration % 60).padStart(2, "0")}`
-                  : "—"}
-              </time>
-            </button>
-          ))}
-        </section>
-        <section className="card detail">
-          {active ? (
+        )}
+        {error && (
+          <div
+            className="card"
+            role="alert"
+            style={{ margin: 24, padding: 20 }}
+          >
+            <h3>
+              {data
+                ? "Could not refresh company data"
+                : "Could not load company data"}
+            </h3>
+            {data && <p>Showing the last successfully loaded data.</p>}
+            <p>{error}</p>
+            <Button onClick={() => void refresh()}>Retry</Button>
+          </div>
+        )}
+        {page === "Attendance plan" ? (
+          <Attendance />
+        ) : loading && !data ? (
+          <div className="empty" role="status">
+            Loading company data from Hunar...
+          </div>
+        ) : (
+          data && (
             <>
-              <div className="detail-head">
-                <span className="avatar large">
-                  {active.candidate_name
-                    .split(" ")
-                    .map((x) => x[0])
-                    .join("")}
-                </span>
-                <div>
-                  <h2>{active.candidate_name}</h2>
-                  <p>
-                    <Pill
-                      tone={active.status === "COMPLETED" ? "green" : "gray"}
-                    >
-                      {active.status.replace("_", " ")}
-                    </Pill>{" "}
-                    {active.duration
-                      ? `${Math.floor(active.duration / 60)} min ${active.duration % 60} sec`
-                      : "No duration"}
-                  </p>
+              {page === "Overview" && (
+                <div className="page">
+                  <div className="welcome">
+                    <div>
+                      <Pill tone="lime">Hunar account</Pill>
+                      <h1>Your outreach overview.</h1>
+                      <p>
+                        Metrics calculated from the calls returned by your
+                        company account.
+                      </p>
+                    </div>
+                    <Button onClick={() => setPage("People search")}>
+                      View contacts
+                    </Button>
+                  </div>
+                  <section className="metrics">
+                    {[
+                      ["Contacts", candidates.length],
+                      ["Calls completed", completed],
+                      ["Interested responses", interested],
+                      ["Agents", data.agents.length],
+                    ].map(([label, value]) => (
+                      <article key={label}>
+                        <div>
+                          <small>{label}</small>
+                          <strong>{value}</strong>
+                        </div>
+                      </article>
+                    ))}
+                  </section>
+                  <section className="card calls-card">
+                    <div className="card-head">
+                      <h2>Recent calls</h2>
+                      <Button onClick={() => setPage("Conversations")}>
+                        View all {calls.length} calls
+                      </Button>
+                    </div>
+                    {callRows(
+                      [...calls]
+                        .sort((a, b) =>
+                          b.created_at.localeCompare(a.created_at),
+                        )
+                        .slice(0, 10),
+                    )}
+                  </section>
+                  <section
+                    className="card"
+                    style={{ marginTop: 24, padding: 24 }}
+                  >
+                    <h2>Company agents</h2>
+                    {data.agents.length ? (
+                      <div className="agent-list">
+                        {data.agents.map((a) => (
+                          <div key={a.id} style={{ marginTop: 16 }}>
+                            <b>{a.name}</b> <Pill>{a.status}</Pill>
+                            <p>{a.summary}</p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p>No agents returned by Hunar.</p>
+                    )}
+                  </section>
                 </div>
-                <button className="secondary">
-                  <Phone size={15} /> Call again
-                </button>
-              </div>
-              {active.status === "COMPLETED" ? (
-                <>
-                  <h3>Screening summary</h3>
-                  <div className="answer-grid">
-                    {Object.entries(active.result).map(([k, v]) => (
-                      <div>
-                        <small>{k.replaceAll("_", " ")}</small>
-                        <b>{v}</b>
+              )}
+              {page === "People search" && (
+                <div className="page search-page">
+                  <div className="title-row">
+                    <div>
+                      <span className="eyebrow">HUNAR CONTACTS</span>
+                      <h1>People in your company account.</h1>
+                      <p>
+                        Contacts from Hunar call history. Search the details
+                        supplied by Hunar.
+                      </p>
+                    </div>
+                  </div>
+                  <section className="search-builder card">
+                    <label>
+                      Search name, phone, role, company or skills
+                      <div className="input">
+                        <Search size={16} />
+                        <input
+                          value={query}
+                          onChange={(e) => setQuery(e.target.value)}
+                          placeholder="Search Hunar contacts"
+                        />
                       </div>
+                    </label>
+                  </section>
+                  <div className="results-head">
+                    <h2>{filtered.length} contacts</h2>
+                    <Button
+                      disabled={!chosen.length}
+                      onClick={() => setPage("Outreach")}
+                    >
+                      Reach out to {chosen.length}
+                    </Button>
+                  </div>
+                  <div className="candidate-list">
+                    {filtered
+                      .slice(
+                        contactPage * pageSize,
+                        (contactPage + 1) * pageSize,
+                      )
+                      .map((c) => (
+                        <article
+                          className={`candidate card ${selected.includes(c.id) ? "selected" : ""}`}
+                          key={c.id}
+                        >
+                          <input
+                            aria-label={`Select ${c.name}`}
+                            type="checkbox"
+                            checked={selected.includes(c.id)}
+                            onChange={(e) =>
+                              setSelected(
+                                e.target.checked
+                                  ? [...selected, c.id]
+                                  : selected.filter((id) => id !== c.id),
+                              )
+                            }
+                          />
+                          <span className="avatar large">{c.avatar}</span>
+                          <div className="candidate-main">
+                            <div>
+                              <h3>{c.name}</h3>
+                              <Pill>{c.status}</Pill>
+                            </div>
+                            <b>
+                              {c.role || "Role not provided"}
+                              {c.company && ` at ${c.company}`}
+                            </b>
+                            <p>
+                              {c.phone || "Phone not provided"}
+                              {c.location && ` | ${c.location}`}
+                            </p>
+                            <div className="skills">
+                              {c.skills.map((skill, i) => (
+                                <Pill key={`${skill}-${i}`}>{skill}</Pill>
+                              ))}
+                            </div>
+                          </div>
+                        </article>
+                      ))}
+                  </div>
+                  {filtered.length > pageSize && (
+                    <div className="pagination">
+                      <Button
+                        disabled={!contactPage}
+                        onClick={() => setContactPage(contactPage - 1)}
+                      >
+                        Previous
+                      </Button>
+                      <span>
+                        Page {contactPage + 1} of{" "}
+                        {Math.ceil(filtered.length / pageSize)}
+                      </span>
+                      <Button
+                        disabled={
+                          (contactPage + 1) * pageSize >= filtered.length
+                        }
+                        onClick={() => setContactPage(contactPage + 1)}
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  )}
+                  {!filtered.length && (
+                    <div className="empty">
+                      No contacts found in the Hunar data.
+                    </div>
+                  )}
+                </div>
+              )}
+              {page === "Outreach" && (
+                <div className="page">
+                  <div className="title-row">
+                    <div>
+                      <h1>Launch Hunar voice outreach.</h1>
+                      <p>
+                        Calls use the selected agent's script and the contact
+                        details stored in Hunar.
+                      </p>
+                    </div>
+                  </div>
+                  <section
+                    className="card outreach-setup"
+                    style={{ padding: 24 }}
+                  >
+                    <Button onClick={() => setPage("People search")}>
+                      Edit selected contacts
+                    </Button>
+                    <h2>{chosen.length} selected contacts</h2>
+                    {chosen.map((c) => (
+                      <p key={c.id}>
+                        {c.name} | {c.phone || "No phone"}
+                      </p>
                     ))}
+                    {!chosen.length && (
+                      <Button onClick={() => setPage("People search")}>
+                        Select contacts
+                      </Button>
+                    )}
+                    <label style={{ display: "block", marginTop: 24 }}>
+                      Hunar agent{" "}
+                      <select
+                        value={agent}
+                        onChange={(e) => {
+                          setAgent(e.target.value);
+                          setConfirmed(false);
+                        }}
+                      >
+                        <option value="">Select an agent</option>
+                        {data.agents.map((a) => (
+                          <option key={a.id} value={a.id}>
+                            {a.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {!data.live_calls && (
+                      <p>
+                        Live calling is disabled in the server configuration.
+                      </p>
+                    )}
+                    <label style={{ display: "block", margin: "24px 0" }}>
+                      <input
+                        type="checkbox"
+                        checked={confirmed}
+                        onChange={(e) => setConfirmed(e.target.checked)}
+                      />{" "}
+                      Place real phone calls to these {chosen.length} contacts
+                      using this agent.
+                    </label>
+                    <Button
+                      disabled={
+                        launching ||
+                        !confirmed ||
+                        !data.live_calls ||
+                        !chosen.length ||
+                        !data.agents.some((a) => a.id === agent)
+                      }
+                      onClick={launch}
+                    >
+                      {launching ? "Sending to Hunar..." : "Launch live calls"}
+                    </Button>
+                  </section>
+                </div>
+              )}
+              {page === "Conversations" && (
+                <div className="page">
+                  <div className="title-row">
+                    <div>
+                      <h1>Company conversations.</h1>
+                      <p>Statuses, recordings and answers from Hunar.</p>
+                    </div>
                   </div>
-                  <div className="transcript-head">
-                    <h3>Transcript</h3>
-                    <button className="link">
-                      <Play size={14} /> Play recording
-                    </button>
-                  </div>
-                  <div className="transcript">
-                    {active.transcript.map((t) => (
-                      <div className={t.speaker === "AI" ? "ai" : ""}>
-                        <b>
-                          {t.speaker === "AI"
-                            ? "Maya · AI agent"
-                            : active.candidate_name}
-                        </b>
-                        <p>{t.text}</p>
+
+                  {activeId && (
+                    <section
+                      id="call-detail"
+                      className="card detail call-detail"
+                      style={{ marginBottom: 24, padding: 24 }}
+                    >
+                      <div className="detail-toolbar">
+                        <h2>Call details</h2>
+                        <Button onClick={() => setActiveId("")}>
+                          Close details
+                        </Button>
                       </div>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <div className="empty">
-                  <PhoneCall />
-                  <h3>Candidate was not connected</h3>
-                  <p>
-                    The retry policy will automatically try again during the
-                    candidate’s preferred calling hours.
-                  </p>
+                      {detailLoading ? (
+                        <p>Loading call details...</p>
+                      ) : detailError ? (
+                        <p role="alert">{detailError}</p>
+                      ) : (
+                        detail && (
+                          <>
+                            <h2>{detail.candidate_name}</h2>
+                            <Pill>{detail.status}</Pill>
+                            <p>{detail.duration} seconds</p>
+                            <h3>Structured answers</h3>
+                            <div className="answer-grid">
+                              {Object.entries(detail.result).map(([k, v]) => (
+                                <div key={k}>
+                                  <small>{k.replaceAll("_", " ")}</small>
+                                  <b>{display(v)}</b>
+                                </div>
+                              ))}
+                            </div>
+                            {!Object.keys(detail.result).length && (
+                              <p>
+                                No structured answers supplied for this call.
+                              </p>
+                            )}
+                            <h3>Recording</h3>
+                            {/^https?:\/\//.test(detail.recording_url) ? (
+                              <audio
+                                controls
+                                src={detail.recording_url}
+                                preload="none"
+                              />
+                            ) : (
+                              <p>No recording supplied for this call.</p>
+                            )}
+                            <h3>Transcript</h3>
+                            {detail.transcript.length ? (
+                              detail.transcript.map((t, i) => (
+                                <div key={i}>
+                                  <b>{t.speaker}</b>
+                                  <p>{t.text}</p>
+                                </div>
+                              ))
+                            ) : (
+                              <p>No transcript supplied for this call.</p>
+                            )}
+                          </>
+                        )
+                      )}
+                    </section>
+                  )}
+                  <section className="card calls-card">
+                    <div className="card-head">
+                      <h2>All conversations</h2>
+                      <span>{calls.length} calls</span>
+                    </div>
+                    {callRows(
+                      [...calls]
+                        .sort((a, b) =>
+                          b.created_at.localeCompare(a.created_at),
+                        )
+                        .slice(callPage * pageSize, (callPage + 1) * pageSize),
+                    )}
+                    {calls.length > pageSize && (
+                      <div className="pagination">
+                        <Button
+                          disabled={!callPage}
+                          onClick={() => setCallPage(callPage - 1)}
+                        >
+                          Previous
+                        </Button>
+                        <span>
+                          Page {callPage + 1} of{" "}
+                          {Math.ceil(calls.length / pageSize)}
+                        </span>
+                        <Button
+                          disabled={(callPage + 1) * pageSize >= calls.length}
+                          onClick={() => setCallPage(callPage + 1)}
+                        >
+                          Next
+                        </Button>
+                      </div>
+                    )}
+                  </section>
                 </div>
               )}
             </>
-          ) : (
-            <div className="empty">
-              <Headphones />
-              <h3>No conversations yet</h3>
-              <p>Launch an outreach campaign to see structured answers here.</p>
-            </div>
-          )}
-        </section>
-      </div>
-    </div>
-  );
-}
-
-function ConversationTable({ calls }: { calls: Call[] }) {
-  return (
-    <div className="table">
-      <div className="tr th">
-        <span>Candidate</span>
-        <span>Outcome</span>
-        <span>Key response</span>
-        <span>Duration</span>
-        <span />
-      </div>
-      {calls.slice(0, 4).map((c) => (
-        <div className="tr">
-          <span className="person">
-            <i className="avatar small">
-              {c.candidate_name
-                .split(" ")
-                .map((x) => x[0])
-                .join("")}
-            </i>
-            <b>{c.candidate_name}</b>
-          </span>
-          <span>
-            <Pill tone={c.status === "COMPLETED" ? "green" : "gray"}>
-              {c.status.replace("_", " ")}
-            </Pill>
-          </span>
-          <span>
-            {c.result?.interest
-              ? `${c.result.interest} interest · ${c.result.notice_period}`
-              : "Retry scheduled"}
-          </span>
-          <span>
-            {c.duration
-              ? `${Math.floor(c.duration / 60)}m ${c.duration % 60}s`
-              : "—"}
-          </span>
-          <button className="icon">
-            <ChevronRight />
-          </button>
-        </div>
-      ))}
+          )
+        )}
+      </main>
     </div>
   );
 }
@@ -1010,7 +752,7 @@ function Attendance() {
     <div className="page attendance">
       <div className="attendance-hero">
         <Pill tone="lime">
-          <ShieldCheck size={13} /> Assignment challenge 03
+          <ShieldCheck size={13} /> Feature proposal: not live attendance data
         </Pill>
         <h1>
           Attendance without apps.
@@ -1019,7 +761,7 @@ function Attendance() {
         </h1>
         <p>
           A voice-first, privacy-aware attendance system for 1,000 employees
-          across 100 locations—using feature phones, landlines, and an LLM
+          across 100 locations using feature phones, landlines, and an LLM
           coordination layer.
         </p>
         <div>
@@ -1084,7 +826,7 @@ function Attendance() {
       </section>
       <section className="plan-grid">
         {steps.map(([n, t, d]) => (
-          <article className="card">
+          <article key={n} className="card">
             <span>{n}</span>
             <h3>{t}</h3>
             <p>{d}</p>

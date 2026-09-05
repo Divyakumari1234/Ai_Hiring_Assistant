@@ -1,25 +1,13 @@
-# Architecture and product decisions
+# Architecture
 
-## Hiring flow
+Next.js proxies `/api/*` to FastAPI. FastAPI authenticates server-side to Hunar using `X-API-Key` from `backend/.env`.
 
-1. HR pastes a job description and optional filters.
-2. FastAPI extracts search intent and queries GitHub's public-profile search API. The included demo provider keeps the evaluator flow usable during rate limits or provider outages.
-3. HR reviews ranked candidates and explicitly selects who may be contacted.
-4. FastAPI reads the key from its environment and sends Hunar's documented bulk-call payload to `POST /external/v1/calls/bulk/`.
-5. Call events update SQLite through the webhook endpoint; the dashboard presents status, transcript, recording, and structured answers.
+`GET /api/dashboard` reads all pages of Hunar `calls/` and `agents/`. Contacts are derived from the newest call per phone number. Missing profile fields remain absent; no match or experience scores are invented. UI counters derive from returned records.
 
-The integration also supports `GET /external/v1/agents/`, `GET /external/v1/calls/`, and `GET /external/v1/calls/{id}/`. The browser never contacts Hunar directly.
+`GET /api/calls/{id}` reads provider call details. Results retain their original JSON types. Recordings and transcripts are shown only if returned by the provider. Refresh reads the account again; no local demo database or webhook is used.
 
-## Attendance challenge
+`POST /api/outreach` requires explicit live confirmation, an available account agent, and contacts present in current Hunar records. It forwards original contact custom data to Hunar `calls/bulk/`. The frontend does not pretend to configure agent scripts or unsupported SMS channels.
 
-The proposal intentionally avoids smartphones and apps. Each site receives a known IVR number or offline-first GSM terminal. Employees check in using their ID, a rotating spoken phrase, and consented voice verification. Caller/site binding and anomaly scoring limit buddy punching. The LLM gathers context for exceptions but cannot mutate payroll; HR approval and an audit log remain mandatory.
+People search filters existing company contacts. The attendance screen is a feature proposal. Neither view claims access to an unverified external sourcing or attendance endpoint.
 
-Failure modes are covered by encrypted store-and-forward events, daily paper fallback codes, supervisor batch submission, and reconciliation reports.
-
-## Production hardening
-
-- Put the API behind managed TLS and rate limiting.
-- Validate Hunar webhook signatures once the account secret is configured.
-- Encrypt candidate PII and recordings at rest; use role-based access and retention limits.
-- Replace SQLite with Postgres and run outreach creation through a durable queue.
-- Obtain candidate consent and respect DND/time-window rules before enabling live calls.
+Provider failures return errors instead of demo data. Pagination is followed only within the configured provider API origin and path so credentials cannot be forwarded to a foreign host. No API secrets are sent to the browser.

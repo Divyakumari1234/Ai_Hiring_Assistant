@@ -109,6 +109,14 @@ export default function App() {
     setLoading(true);
     setError("");
     try {
+      if (!force && !data) {
+        const preview = await api.dashboardPreview();
+        setData(preview);
+        if (!preview.partial) {
+          setAgent(preview.default_agent_id);
+          return;
+        }
+      }
       const response = await api.dashboard(force);
       setData(response);
       setAgent((current) =>
@@ -349,6 +357,12 @@ export default function App() {
             style={{ margin: 24, padding: 20 }}
           >
             {message}
+          </div>
+        )}
+        {data?.partial && (
+          <div className="card" role="status" style={{ margin: 24, padding: 20 }}>
+            Showing the first batch of company records. Counts are partial.
+            {loading ? " Loading remaining records..." : " Use Retry to load all records."}
           </div>
         )}
         {error && (

@@ -142,3 +142,18 @@ def test_concurrent_dashboard_requests_share_provider_fetch(monkeypatch):
         assert responses == [{"source": "hunar"}, {"source": "hunar"}]
     asyncio.run(check())
     assert count == 1
+
+def test_dashboard_preview_returns_first_page_without_caching_partial_data(provider):
+    with TestClient(main.app) as client:
+        preview = client.get('/api/dashboard?preview=true').json()
+        assert preview['partial'] is True
+        assert len(preview['calls']) == 1
+        assert not any('page=2' in path for _, path, _ in provider)
+        assert not main._dashboard_cache
+        complete = client.get('/api/dashboard').json()
+        assert complete['partial'] is False
+        assert len(complete['calls']) == 2
+        count = len(provider)
+        cached = client.get('/api/dashboard?preview=true').json()
+        assert cached['partial'] is False
+        assert len(provider) == count

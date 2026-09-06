@@ -42,7 +42,7 @@ cd backend
 
 Run `npm run lint` and `npm run build` in `frontend`.
 
-Dashboard loading reuses provider connections and fetches agents and calls concurrently. Successful responses are cached in backend memory for 30 seconds; Refresh explicitly bypasses this cache. Concurrent requests share one fetch. Existing screen data remains visible during refresh, with an error notice if updating fails. No demo data is cached.
+Dashboard loading reuses provider connections and fetches agents and calls concurrently. Successful responses are cached in backend memory for 2 minutes; Refresh explicitly bypasses this cache. Concurrent full-dashboard requests share one fetch. On an uncached visit, the first page of calls and agents appears before the full history finishes loading; a notice identifies the counts as partial until the complete response arrives. Existing screen data remains visible during refresh, with an error notice if updating fails. No demo data is cached.
 
 ## Remaining assignment work
 

@@ -38,6 +38,7 @@ export type Call = {
   provider: string;
 };
 export type Dashboard = {
+  partial?: boolean;
   candidates: Candidate[];
   calls: Call[];
   agents: { id: string; name: string; status: string; summary: string }[];

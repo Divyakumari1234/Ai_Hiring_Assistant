@@ -66,7 +66,7 @@ async def hunar(method: str, path: str, payload: dict | None = None) -> Any:
         raise HTTPException(502, "Could not read Hunar API. Please retry.") from None
 
 
-async def all_rows(path: str) -> list[dict]:
+async def all_rows(path: str, first_page_only: bool = False) -> list[dict]:
     rows = []
     seen = set()
     next_page = path + "?page_size=100"
@@ -81,7 +81,7 @@ async def all_rows(path: str) -> list[dict]:
         if not isinstance(data, dict) or not isinstance(data.get("results"), list):
             raise HTTPException(502, "Unexpected Hunar list response")
         rows.extend(data["results"])
-        next_page = data.get("next")
+        next_page = None if first_page_only else data.get("next")
     return rows
 
 
@@ -135,14 +135,14 @@ def health():
             "live_calls": settings.hunar_live_calls, "source": "hunar"}
 
 
-async def load_dashboard():
+async def load_dashboard(preview: bool = False):
     async with httpx.AsyncClient(timeout=30) as client:
         token = _client.set(client)
         try:
-            rows, agents = await asyncio.gather(all_rows("calls/"), all_rows("agents/"))
+            rows, agents = await asyncio.gather(all_rows("calls/", preview), all_rows("agents/", preview))
         finally:
             _client.reset(token)
-    return {"candidates": contacts(rows), "calls": [normalize_call(r) for r in rows],
+    return {"partial": preview, "candidates": contacts(rows), "calls": [normalize_call(r) for r in rows],
             "agents": [{"id": a["id"], "name": a.get("name") or a["id"],
                         "status": a.get("status") or "", "summary": a.get("summary") or ""} for a in agents],
             "source": "hunar", "live_calls": settings.hunar_live_calls,
@@ -150,14 +150,16 @@ async def load_dashboard():
 
 
 @app.get("/api/dashboard")
-async def dashboard(refresh: bool = False):
+async def dashboard(refresh: bool = False, preview: bool = False):
     global _dashboard_task
     if not refresh and _dashboard_cache.get("expires", 0) > monotonic():
         return _dashboard_cache["data"]
+    if preview:
+        return await load_dashboard(preview=True)
     if _dashboard_task is None or _dashboard_task.done():
         async def load():
             data = await load_dashboard()
-            _dashboard_cache.update(data=data, expires=monotonic() + 30)
+            _dashboard_cache.update(data=data, expires=monotonic() + 120)
             return data
         _dashboard_task = asyncio.create_task(load())
     return await asyncio.shield(_dashboard_task)

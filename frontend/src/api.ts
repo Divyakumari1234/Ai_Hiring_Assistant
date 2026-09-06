@@ -65,6 +65,7 @@ export const api = {
       "/api/search",
       { method: "POST", body: JSON.stringify(input) },
     ),
+  dashboardPreview: () => request<Dashboard>("/api/dashboard?preview=true"),
   dashboard: (refresh = false) => {
     if (!dashboardRequest) {
       dashboardRequest = request<Dashboard>(

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Reachly — AI Hiring Assistant",
+  title: "Niyora — AI Hiring Assistant",
   description:
     "People search, voice outreach, and structured hiring insights powered by Hunar AI.",
 };

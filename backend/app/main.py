@@ -31,7 +31,7 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-app = FastAPI(title="Reachly Hunar API", version="2.0.0")
+app = FastAPI(title="Niyora Hunar API", version="2.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=[settings.frontend_origin],
                    allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
@@ -243,7 +243,7 @@ async def outreach(body: OutreachRequest):
         "data": [{"callee_name": r.get("callee_name") or "", "mobile_number": r["mobile_number"],
                   "custom_data": r.get("custom_data") or {}} for r in selected],
         "remove_invalid_rows": False, "remove_duplicate_phone_numbers": True,
-        "request_id": f"reachly-{uuid.uuid4().hex}",
+        "request_id": f"niyora-{uuid.uuid4().hex}",
     })
     _dashboard_cache.clear()
     return {"calls": created, "mode": "live", "message": "Hunar accepted the outreach request"}

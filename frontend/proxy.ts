@@ -28,7 +28,7 @@ export function proxy(request: NextRequest) {
   return new NextResponse("Sign in to the hiring workspace", {
     status: 401,
     headers: {
-      "WWW-Authenticate": 'Basic realm="Reachly", charset="UTF-8"',
+      "WWW-Authenticate": 'Basic realm="Niyora", charset="UTF-8"',
       "Cache-Control": "no-store",
     },
   });

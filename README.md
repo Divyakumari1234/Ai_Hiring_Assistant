@@ -1,6 +1,6 @@
-# Reachly - Hunar voice workspace
+# Niyora - Hunar voice workspace
 
-Reachly combines Hunar voice outreach with People Data Labs candidate search. The dashboard displays company agents, call outcomes, and counts calculated from Hunar records. Existing contacts are deduplicated by phone number.
+Niyora combines Hunar voice outreach with People Data Labs candidate search. The dashboard displays company agents, call outcomes, and counts calculated from Hunar records. Existing contacts are deduplicated by phone number.
 
 ## Run locally (PowerShell)
 

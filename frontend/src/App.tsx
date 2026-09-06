@@ -243,7 +243,7 @@ export default function App() {
       <aside className={mobileNav ? "open" : ""}>
         <div className="brand-row">
           <div className="logo">
-            <Zap /> reachly
+            <Zap /> Niyora
           </div>
           <button
             className="icon mobile-only"

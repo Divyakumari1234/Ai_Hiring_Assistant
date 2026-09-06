@@ -46,7 +46,13 @@ Dashboard loading reuses provider connections and fetches agents and calls concu
 
 ## Remaining assignment work
 
-People Data Labs integration is implemented and tested with mocked provider responses. A valid Person Search key is required for live verification. A controlled real-call test and verification of a public deployment remain pending until account access and an authorized test number are available.
+People Data Labs integration is implemented and tested with mocked provider responses. A valid Person Search key is still required for live verification.
+
+## Deployment and call verification
+
+The [deployed workspace](https://ai-hiring-assistant-28ni.onrender.com/) was checked on September 6, 2026. Reviewer login, the health endpoint, and authenticated dashboard requests worked; unauthenticated dashboard requests returned HTTP 401.
+
+One consented test call was placed through the backend Hunar adapter with automatic retries disabled. The call completed in 26 seconds and appeared in the deployed dashboard with a structured summary and an accessible recording. Salary, notice period, and joining date were not discussed and remained empty. This check exercised the backend adapter and deployed read endpoints; it was not a browser-driven test of the Launch button. The test phone number and reviewer credentials are not stored in this repository.
 
 
 ## People Data Labs setup

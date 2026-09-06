@@ -6,9 +6,9 @@ Next.js proxies `/api/*` to FastAPI. FastAPI authenticates server-side to Hunar 
 
 `GET /api/calls/{id}` reads provider call details. Results retain their original JSON types. Recordings and transcripts are shown only if returned by the provider. Refresh reads the account again; no local demo database or webhook is used.
 
-`POST /api/outreach` requires explicit live confirmation, an available account agent, and contacts present in current Hunar records. It forwards original contact custom data to Hunar `calls/bulk/`. The frontend does not pretend to configure agent scripts or unsupported SMS channels.
+`POST /api/outreach` requires live-call confirmation and an available account agent. Selected IDs resolve to Hunar contacts or saved People Data Labs profiles. Contact custom data is sent to Hunar `calls/bulk/`; the selected Hunar agent supplies the conversation script.
 
-People search can filter existing contacts or send reviewed JD criteria to People Data Labs. Sourced profiles are persisted in a separate SQLite table and their IDs resolve server-side for Hunar outreach. No sample records are seeded. The attendance screen is a feature proposal. Attendance records are not fetched; that screen remains a proposal.
+People search filters existing contacts or sends reviewed JD criteria to People Data Labs. Sourced profiles are persisted in SQLite and resolved server-side for outreach. The attendance screen documents the proposed IVR workflow; it does not collect live attendance records.
 
 Provider failures return errors instead of demo data. Pagination is followed only within the configured provider API origin and path so credentials cannot be forwarded to a foreign host. No API secrets are sent to the browser.
 

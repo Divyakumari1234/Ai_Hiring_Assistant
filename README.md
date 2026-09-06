@@ -1,6 +1,6 @@
 # Reachly - Hunar voice workspace
 
-The dashboard reads company agents and calls directly from the configured Hunar account. Contacts are deduplicated from Hunar call history. Counts are calculated from these records. There are no seeded contacts, demo calls, GitHub search results or invented match scores.
+Reachly combines Hunar voice outreach with People Data Labs candidate search. The dashboard displays company agents, call outcomes, and counts calculated from Hunar records. Existing contacts are deduplicated by phone number.
 
 ## Run locally (PowerShell)
 
@@ -31,7 +31,7 @@ Open http://localhost:3000. Refresh retrieves the current provider data. Failed 
 - Outreach: select contacts and a company agent, tick the real-call confirmation, then click Launch live calls. This sends an actual bulk call request and may incur provider charges. The script and configuration belong to the Hunar agent. Set `HUNAR_LIVE_CALLS=false` to disable launches while still reading real data.
 - Attendance plan: a clearly labelled feature proposal, not live attendance records.
 
-Old local SQLite demo records are not read or changed. The browser never receives the API key. Live calls are not placed during tests.
+API keys stay on the backend. Automated tests mock external providers and do not place calls.
 
 ## Validation
 
@@ -71,6 +71,6 @@ The root `Dockerfile` runs Next.js publicly and Python on loopback inside one co
 4. Deploy and wait for `/healthz` to pass. Open the assigned HTTPS URL and log in.
 5. Confirm candidate search, company data and one consented call before sharing the URL and reviewer login with HR.
 
-Render's free service can sleep and its filesystem is ephemeral. Sourced candidate storage is lost on redeploy/restart; rerun search if a selected profile is no longer available. Do not claim a public deployment is verified until its actual URL has been tested. [Render Blueprint reference](https://render.com/docs/blueprint-spec).
+Render's free service can sleep and its filesystem is ephemeral. Sourced candidate storage is lost on redeploy/restart; rerun search if a selected profile is no longer available. [Render Blueprint reference](https://render.com/docs/blueprint-spec).
 
 For a local container check, set `$env:REVIEW_PASSWORD` in PowerShell and run `docker compose up --build` from the repository root. Open http://localhost:8080 and log in as `reviewer`. Docker Desktop must be running. Frontend tests run with `node --test tests/api.test.mjs tests/proxy.test.cjs` in `frontend` using Node 22.15+ with TypeScript stripping support (validated on Node 26).
